@@ -5,7 +5,14 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,27 +21,31 @@ import org.springframework.web.bind.annotation.RestController;
 import com.umkmconnect.umkm_connect.entity.User;
 import com.umkmconnect.umkm_connect.service.UserService;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
+
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    private final AuthenticationManager authenticationManager;
     private final UserService userService;
-    private final PasswordEncoder passwordEncoder;
 
     public AuthController(
-            UserService userService,
-            PasswordEncoder passwordEncoder
+            AuthenticationManager authenticationManager,
+            UserService userService
     ) {
+        this.authenticationManager = authenticationManager;
         this.userService = userService;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping("/login")
     public ResponseEntity<?> login(
-            @RequestBody Map<String, String> request
+            @RequestBody Map<String, String> requestBody,
+            HttpServletRequest request
     ) {
-        String email = request.get("email");
-        String password = request.get("password");
+        String email = requestBody.get("email");
+        String password = requestBody.get("password");
 
         if (email == null || email.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(
@@ -52,15 +63,44 @@ public class AuthController {
                 .trim()
                 .toLowerCase(Locale.ROOT);
 
-        User user = userService
-                .getUserByEmail(normalizedEmail)
-                .orElse(null);
+        try {
+            Authentication authentication =
+                    authenticationManager.authenticate(
+                            new UsernamePasswordAuthenticationToken(
+                                    normalizedEmail,
+                                    password
+                            )
+                    );
 
-        if (user == null
-                || !passwordEncoder.matches(
-                        password,
-                        user.getPassword()
-                )) {
+            SecurityContext securityContext =
+                    SecurityContextHolder.createEmptyContext();
+
+            securityContext.setAuthentication(authentication);
+            SecurityContextHolder.setContext(securityContext);
+
+            HttpSession session = request.getSession(true);
+
+            session.setAttribute(
+                    HttpSessionSecurityContextRepository
+                            .SPRING_SECURITY_CONTEXT_KEY,
+                    securityContext
+            );
+
+            User user = userService
+                    .getUserByEmail(normalizedEmail)
+                    .orElseThrow();
+
+            return ResponseEntity.ok(
+                    Map.of(
+                            "message", "Login berhasil.",
+                            "userId", user.getId(),
+                            "name", user.getName(),
+                            "email", user.getEmail(),
+                            "role", user.getRole().name()
+                    )
+            );
+
+        } catch (BadCredentialsException exception) {
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(
@@ -70,10 +110,48 @@ public class AuthController {
                             )
                     );
         }
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(
+            HttpServletRequest request
+    ) {
+        HttpSession session = request.getSession(false);
+
+        if (session != null) {
+            session.invalidate();
+        }
+
+        SecurityContextHolder.clearContext();
+
+        return ResponseEntity.ok(
+                Map.of("message", "Logout berhasil.")
+        );
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getCurrentUser(
+            Authentication authentication
+    ) {
+        if (authentication == null
+                || !authentication.isAuthenticated()) {
+            return ResponseEntity
+                    .status(HttpStatus.UNAUTHORIZED)
+                    .body(
+                            Map.of("message", "Belum login.")
+                    );
+        }
+
+        User user = userService
+                .getUserByEmail(authentication.getName())
+                .orElse(null);
+
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
 
         return ResponseEntity.ok(
                 Map.of(
-                        "message", "Login berhasil.",
                         "userId", user.getId(),
                         "name", user.getName(),
                         "email", user.getEmail(),
