@@ -23,9 +23,12 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
-                // Halaman dan endpoint publik
+                // Halaman yang dapat dibuka tanpa login
                 .requestMatchers(
                         "/",
+                        "/error",
+                        "/u",
+                        "/u/**",
                         "/css/**",
                         "/js/**",
                         "/images/**",
@@ -35,33 +38,38 @@ public class SecurityConfig {
                         "/api/users/register"
                 ).permitAll()
 
-                // Data publik yang boleh dilihat masyarakat
+                // Data publik
                 .requestMatchers(
                         HttpMethod.GET,
+                        "/api/umkms",
                         "/api/umkms/**",
+                        "/api/products",
                         "/api/products/**",
+                        "/api/categories",
                         "/api/categories/**"
                 ).permitAll()
 
-                // Daftar akun hanya boleh dilihat Admin
-                .requestMatchers("/api/users/**")
-                .hasRole("ADMIN")
+                // Data akun hanya bisa dilihat Admin
+                .requestMatchers(
+                        "/api/users/**"
+                ).hasRole("ADMIN")
 
-                // Verifikasi status UMKM hanya oleh Admin
+                // Admin hanya boleh mengubah status verifikasi UMKM
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/umkms/*/status"
                 ).hasRole("ADMIN")
 
-                // Penghapusan data UMKM hanya oleh Admin
+                // Penghapusan UMKM hanya oleh Admin
                 .requestMatchers(
                         HttpMethod.DELETE,
                         "/api/umkms/**"
                 ).hasRole("ADMIN")
 
-                // Profil UMKM hanya dibuat dan diedit oleh pemilik UMKM
+                // Profil hanya dibuat dan diedit pemilik UMKM
                 .requestMatchers(
                         HttpMethod.POST,
+                        "/api/umkms",
                         "/api/umkms/**"
                 ).hasRole("UMKM")
 
@@ -73,6 +81,7 @@ public class SecurityConfig {
                 // Kategori hanya dikelola Admin
                 .requestMatchers(
                         HttpMethod.POST,
+                        "/api/categories",
                         "/api/categories/**"
                 ).hasRole("ADMIN")
 
@@ -89,6 +98,7 @@ public class SecurityConfig {
                 // Produk hanya dikelola pemilik UMKM
                 .requestMatchers(
                         HttpMethod.POST,
+                        "/api/products",
                         "/api/products/**"
                 ).hasRole("UMKM")
 
@@ -102,15 +112,17 @@ public class SecurityConfig {
                         "/api/products/**"
                 ).hasRole("UMKM")
 
-                // Laporan boleh dilihat UMKM, Admin, dan DPRD
+                // Laporan dapat dilihat UMKM, Admin, dan DPRD
                 .requestMatchers(
                         HttpMethod.GET,
+                        "/api/monthly-reports",
                         "/api/monthly-reports/**"
                 ).hasAnyRole("UMKM", "ADMIN", "DPRD")
 
-                // Laporan hanya boleh dikelola pemilik UMKM
+                // Laporan hanya dikelola pemilik UMKM
                 .requestMatchers(
                         HttpMethod.POST,
+                        "/api/monthly-reports",
                         "/api/monthly-reports/**"
                 ).hasRole("UMKM")
 
@@ -124,7 +136,7 @@ public class SecurityConfig {
                         "/api/monthly-reports/**"
                 ).hasRole("UMKM")
 
-                // Endpoint lainnya wajib login
+                // Endpoint lain harus login
                 .anyRequest().authenticated()
             )
 
