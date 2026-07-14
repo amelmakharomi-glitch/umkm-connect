@@ -46,14 +46,18 @@ public class ProductController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Product> getProductById(@PathVariable Long id) {
+    public ResponseEntity<Product> getProductById(
+            @PathVariable Long id
+    ) {
         return productService.getProductById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/umkm/{umkmId}")
-    public List<Product> getProductsByUmkmId(@PathVariable Long umkmId) {
+    public List<Product> getProductsByUmkmId(
+            @PathVariable Long umkmId
+    ) {
         return productService.getProductsByUmkmId(umkmId);
     }
 
@@ -61,18 +65,22 @@ public class ProductController {
     public List<Product> getAvailableProductsByUmkmId(
             @PathVariable Long umkmId
     ) {
-        return productService.getAvailableProductsByUmkmId(umkmId);
+        return productService
+                .getAvailableProductsByUmkmId(umkmId);
     }
 
     @GetMapping("/category/{categoryId}")
     public List<Product> getProductsByCategoryId(
             @PathVariable Long categoryId
     ) {
-        return productService.getProductsByCategoryId(categoryId);
+        return productService
+                .getProductsByCategoryId(categoryId);
     }
 
     @PostMapping
-    public ResponseEntity<?> createProduct(@RequestBody Product productRequest) {
+    public ResponseEntity<?> createProduct(
+            @RequestBody Product productRequest
+    ) {
         String validationError = validateProduct(productRequest);
 
         if (validationError != null) {
@@ -84,7 +92,10 @@ public class ProductController {
         Long umkmId = productRequest.getUmkm().getId();
         Long categoryId = productRequest.getCategory().getId();
 
-        Umkm umkm = umkmService.getUmkmById(umkmId).orElse(null);
+        Umkm umkm = umkmService
+                .getUmkmById(umkmId)
+                .orElse(null);
+
         if (umkm == null) {
             return ResponseEntity.badRequest().body(
                     Map.of("message", "UMKM tidak ditemukan.")
@@ -115,7 +126,8 @@ public class ProductController {
             productRequest.setStatusTersedia(true);
         }
 
-        Product savedProduct = productService.saveProduct(productRequest);
+        Product savedProduct =
+                productService.saveProduct(productRequest);
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -146,7 +158,10 @@ public class ProductController {
         Long umkmId = productRequest.getUmkm().getId();
         Long categoryId = productRequest.getCategory().getId();
 
-        Umkm umkm = umkmService.getUmkmById(umkmId).orElse(null);
+        Umkm umkm = umkmService
+                .getUmkmById(umkmId)
+                .orElse(null);
+
         if (umkm == null) {
             return ResponseEntity.badRequest().body(
                     Map.of("message", "UMKM tidak ditemukan.")
@@ -168,27 +183,41 @@ public class ProductController {
         existingProduct.setNamaProduk(
                 productRequest.getNamaProduk().trim()
         );
-        existingProduct.setDeskripsi(productRequest.getDeskripsi());
-        existingProduct.setHarga(productRequest.getHarga());
-        existingProduct.setFoto(productRequest.getFoto());
-        existingProduct.setStok(
-                productRequest.getStok() == null
-                        ? 0
-                        : productRequest.getStok()
+        existingProduct.setDeskripsi(
+                productRequest.getDeskripsi()
         );
-        existingProduct.setStatusTersedia(
-                productRequest.getStatusTersedia() == null
-                        ? true
-                        : productRequest.getStatusTersedia()
+        existingProduct.setHarga(
+                productRequest.getHarga()
+        );
+        existingProduct.setFoto(
+                productRequest.getFoto()
         );
 
-        return ResponseEntity.ok(
-                productService.saveProduct(existingProduct)
+        Integer stok = productRequest.getStok();
+
+        existingProduct.setStok(
+                stok == null ? 0 : stok
         );
+
+        Boolean statusTersedia =
+                productRequest.getStatusTersedia();
+
+        existingProduct.setStatusTersedia(
+                statusTersedia == null
+                        ? true
+                        : statusTersedia
+        );
+
+        Product updatedProduct =
+                productService.saveProduct(existingProduct);
+
+        return ResponseEntity.ok(updatedProduct);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteProduct(@PathVariable Long id) {
+    public ResponseEntity<?> deleteProduct(
+            @PathVariable Long id
+    ) {
         if (productService.getProductById(id).isEmpty()) {
             return ResponseEntity.notFound().build();
         }
@@ -207,11 +236,14 @@ public class ProductController {
         }
 
         if (product.getHarga() == null
-                || product.getHarga().compareTo(BigDecimal.ZERO) < 0) {
+                || product.getHarga()
+                .compareTo(BigDecimal.ZERO) < 0) {
             return "Harga tidak boleh kosong atau negatif.";
         }
 
-        if (product.getStok() != null && product.getStok() < 0) {
+        Integer stok = product.getStok();
+
+        if (stok != null && stok < 0) {
             return "Stok tidak boleh negatif.";
         }
 
