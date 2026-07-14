@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -19,6 +20,7 @@ import com.umkmconnect.umkm_connect.entity.Role;
 import com.umkmconnect.umkm_connect.entity.StatusVerifikasi;
 import com.umkmconnect.umkm_connect.entity.Umkm;
 import com.umkmconnect.umkm_connect.entity.User;
+import com.umkmconnect.umkm_connect.service.OwnershipService;
 import com.umkmconnect.umkm_connect.service.UmkmService;
 import com.umkmconnect.umkm_connect.service.UserService;
 
@@ -28,22 +30,23 @@ public class UmkmController {
 
     private final UmkmService umkmService;
     private final UserService userService;
+    private final OwnershipService ownershipService;
 
     public UmkmController(
             UmkmService umkmService,
-            UserService userService
+            UserService userService,
+            OwnershipService ownershipService
     ) {
         this.umkmService = umkmService;
         this.userService = userService;
+        this.ownershipService = ownershipService;
     }
 
-    // Melihat seluruh UMKM
     @GetMapping
     public List<Umkm> getAllUmkm() {
         return umkmService.getAllUmkm();
     }
 
-    // Melihat detail UMKM berdasarkan ID
     @GetMapping("/{id}")
     public ResponseEntity<Umkm> getUmkmById(
             @PathVariable Long id
@@ -53,7 +56,6 @@ public class UmkmController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Melihat UMKM berdasarkan akun pemilik
     @GetMapping("/user/{userId}")
     public ResponseEntity<Umkm> getUmkmByUserId(
             @PathVariable Long userId
@@ -63,10 +65,10 @@ public class UmkmController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // Membuat data profil UMKM
     @PostMapping
     public ResponseEntity<?> createUmkm(
-            @RequestBody Umkm umkmRequest
+            @RequestBody Umkm umkmRequest,
+            Authentication authentication
     ) {
         String validationError = validateUmkm(umkmRequest);
 
@@ -76,24 +78,50 @@ public class UmkmController {
             );
         }
 
+        User currentUser =
+                ownershipService.getCurrentUser(authentication);
+
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
+                    Map.of("message", "Silakan login terlebih dahulu.")
+            );
+        }
+
         Long userId = umkmRequest.getUser().getId();
 
-        User user = userService
+        User pemilik = userService
                 .getUserById(userId)
                 .orElse(null);
 
-        if (user == null) {
+        if (pemilik == null) {
             return ResponseEntity.badRequest().body(
                     Map.of("message", "Akun pengguna tidak ditemukan.")
             );
         }
 
-        if (user.getRole() != Role.UMKM) {
+        if (pemilik.getRole() != Role.UMKM) {
             return ResponseEntity.badRequest().body(
                     Map.of(
                             "message",
                             "Profil UMKM hanya dapat dimiliki akun dengan role UMKM."
                     )
+            );
+        }
+
+        if (currentUser.getRole() == Role.UMKM
+                && !currentUser.getId().equals(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of(
+                            "message",
+                            "Anda hanya dapat membuat profil UMKM untuk akun sendiri."
+                    )
+            );
+        }
+
+        if (currentUser.getRole() != Role.UMKM
+                && currentUser.getRole() != Role.ADMIN) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of("message", "Anda tidak memiliki hak akses.")
             );
         }
 
@@ -106,7 +134,7 @@ public class UmkmController {
             );
         }
 
-        umkmRequest.setUser(user);
+        umkmRequest.setUser(pemilik);
         umkmRequest.setNamaUsaha(
                 umkmRequest.getNamaUsaha().trim()
         );
@@ -117,11 +145,9 @@ public class UmkmController {
                 umkmRequest.getNoWhatsapp().trim()
         );
 
-        if (umkmRequest.getStatusVerifikasi() == null) {
-            umkmRequest.setStatusVerifikasi(
-                    StatusVerifikasi.PENDING
-            );
-        }
+        umkmRequest.setStatusVerifikasi(
+                StatusVerifikasi.PENDING
+        );
 
         Umkm savedUmkm = umkmService.saveUmkm(umkmRequest);
 
@@ -130,11 +156,11 @@ public class UmkmController {
                 .body(savedUmkm);
     }
 
-    // Pemilik UMKM memperbarui profil usahanya
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUmkm(
             @PathVariable Long id,
-            @RequestBody Umkm umkmRequest
+            @RequestBody Umkm umkmRequest,
+            Authentication authentication
     ) {
         Umkm existingUmkm = umkmService
                 .getUmkmById(id)
@@ -144,7 +170,17 @@ public class UmkmController {
             return ResponseEntity.notFound().build();
         }
 
-        String validationError = validateProfilUmkm(umkmRequest);
+        if (!ownershipService.canManageUmkm(authentication, id)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of(
+                            "message",
+                            "Anda tidak boleh mengubah profil UMKM ini."
+                    )
+            );
+        }
+
+        String validationError =
+                validateProfilUmkm(umkmRequest);
 
         if (validationError != null) {
             return ResponseEntity.badRequest().body(
@@ -177,7 +213,6 @@ public class UmkmController {
         return ResponseEntity.ok(updatedUmkm);
     }
 
-    // Admin mengubah status verifikasi UMKM
     @PatchMapping("/{id}/status")
     public ResponseEntity<?> updateStatusVerifikasi(
             @PathVariable Long id,
@@ -208,7 +243,9 @@ public class UmkmController {
                             status.trim().toUpperCase()
                     );
 
-            existingUmkm.setStatusVerifikasi(statusVerifikasi);
+            existingUmkm.setStatusVerifikasi(
+                    statusVerifikasi
+            );
 
             Umkm updatedUmkm =
                     umkmService.saveUmkm(existingUmkm);
@@ -225,7 +262,6 @@ public class UmkmController {
         }
     }
 
-    // Menghapus data UMKM
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUmkm(
             @PathVariable Long id
@@ -266,7 +302,9 @@ public class UmkmController {
             return "Nomor WhatsApp wajib diisi.";
         }
 
-        if (!umkm.getNoWhatsapp().trim().matches("[0-9+\\- ]+")) {
+        if (!umkm.getNoWhatsapp()
+                .trim()
+                .matches("[0-9+\\- ]+")) {
             return "Format nomor WhatsApp tidak valid.";
         }
 
