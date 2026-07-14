@@ -30,6 +30,9 @@ public class Umkm {
     @Column(nullable = false)
     private String namaUsaha;
 
+    @Column(nullable = false, unique = true)
+    private String slug;
+
     @Column(columnDefinition = "TEXT")
     private String deskripsi;
 
@@ -83,6 +86,14 @@ public class Umkm {
 
     public String getNamaUsaha() {
         return namaUsaha;
+    }
+
+    public String getSlug() {
+        return slug;
+    }
+
+    public void setSlug(String slug) {
+        this.slug = slug;
     }
 
     public void setNamaUsaha(String namaUsaha) {

@@ -149,6 +149,12 @@ public class UmkmController {
                 StatusVerifikasi.PENDING
         );
 
+        String slug = umkmService.generateUniqueSlug(
+                umkmRequest.getNamaUsaha()
+        );
+
+        umkmRequest.setSlug(slug);
+
         Umkm savedUmkm = umkmService.saveUmkm(umkmRequest);
 
         return ResponseEntity

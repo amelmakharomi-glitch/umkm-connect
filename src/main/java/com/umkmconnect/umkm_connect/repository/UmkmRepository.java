@@ -10,5 +10,9 @@ public interface UmkmRepository extends JpaRepository<Umkm, Long> {
 
     Optional<Umkm> findByUserId(Long userId);
 
+    Optional<Umkm> findBySlug(String slug);
+
     boolean existsByUserId(Long userId);
+
+    boolean existsBySlug(String slug);
 }
