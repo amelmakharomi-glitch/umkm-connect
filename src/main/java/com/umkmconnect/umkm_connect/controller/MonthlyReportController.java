@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.umkmconnect.umkm_connect.entity.MonthlyReport;
 import com.umkmconnect.umkm_connect.entity.Umkm;
 import com.umkmconnect.umkm_connect.service.MonthlyReportService;
+import com.umkmconnect.umkm_connect.service.OwnershipService;
 import com.umkmconnect.umkm_connect.service.UmkmService;
 
 @RestController
@@ -27,13 +29,16 @@ public class MonthlyReportController {
 
     private final MonthlyReportService monthlyReportService;
     private final UmkmService umkmService;
+    private final OwnershipService ownershipService;
 
     public MonthlyReportController(
             MonthlyReportService monthlyReportService,
-            UmkmService umkmService
+            UmkmService umkmService,
+            OwnershipService ownershipService
     ) {
         this.monthlyReportService = monthlyReportService;
         this.umkmService = umkmService;
+        this.ownershipService = ownershipService;
     }
 
     @GetMapping
@@ -71,7 +76,8 @@ public class MonthlyReportController {
 
     @PostMapping
     public ResponseEntity<?> createReport(
-            @RequestBody MonthlyReport reportRequest
+            @RequestBody MonthlyReport reportRequest,
+            Authentication authentication
     ) {
         String validationError = validateReport(reportRequest);
 
@@ -82,6 +88,18 @@ public class MonthlyReportController {
         }
 
         Long umkmId = reportRequest.getUmkm().getId();
+
+        if (!ownershipService.canManageUmkm(
+                authentication,
+                umkmId
+        )) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of(
+                            "message",
+                            "Anda hanya boleh membuat laporan untuk UMKM milik sendiri."
+                    )
+            );
+        }
 
         Umkm umkm = umkmService
                 .getUmkmById(umkmId)
@@ -122,7 +140,8 @@ public class MonthlyReportController {
     @PutMapping("/{id}")
     public ResponseEntity<?> updateReport(
             @PathVariable Long id,
-            @RequestBody MonthlyReport reportRequest
+            @RequestBody MonthlyReport reportRequest,
+            Authentication authentication
     ) {
         MonthlyReport existingReport = monthlyReportService
                 .getReportById(id)
@@ -130,6 +149,21 @@ public class MonthlyReportController {
 
         if (existingReport == null) {
             return ResponseEntity.notFound().build();
+        }
+
+        Long existingUmkmId =
+                existingReport.getUmkm().getId();
+
+        if (!ownershipService.canManageUmkm(
+                authentication,
+                existingUmkmId
+        )) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of(
+                            "message",
+                            "Anda tidak boleh mengubah laporan ini."
+                    )
+            );
         }
 
         String validationError = validateReport(reportRequest);
@@ -140,21 +174,21 @@ public class MonthlyReportController {
             );
         }
 
-        Long umkmId = reportRequest.getUmkm().getId();
+        Long requestedUmkmId =
+                reportRequest.getUmkm().getId();
 
-        Umkm umkm = umkmService
-                .getUmkmById(umkmId)
-                .orElse(null);
-
-        if (umkm == null) {
-            return ResponseEntity.badRequest().body(
-                    Map.of("message", "UMKM tidak ditemukan.")
+        if (!existingUmkmId.equals(requestedUmkmId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of(
+                            "message",
+                            "Laporan tidak boleh dipindahkan ke UMKM lain."
+                    )
             );
         }
 
         MonthlyReport reportPadaPeriodeSama = monthlyReportService
                 .getReportByPeriode(
-                        umkmId,
+                        requestedUmkmId,
                         reportRequest.getBulan(),
                         reportRequest.getTahun()
                 )
@@ -170,7 +204,6 @@ public class MonthlyReportController {
             );
         }
 
-        existingReport.setUmkm(umkm);
         existingReport.setBulan(reportRequest.getBulan());
         existingReport.setTahun(reportRequest.getTahun());
         existingReport.setOmzetKotor(
@@ -188,8 +221,12 @@ public class MonthlyReportController {
         existingReport.setJumlahTenagaKerja(
                 defaultInteger(reportRequest.getJumlahTenagaKerja())
         );
-        existingReport.setKendala(reportRequest.getKendala());
-        existingReport.setCatatan(reportRequest.getCatatan());
+        existingReport.setKendala(
+                reportRequest.getKendala()
+        );
+        existingReport.setCatatan(
+                reportRequest.getCatatan()
+        );
 
         MonthlyReport updatedReport =
                 monthlyReportService.saveReport(existingReport);
@@ -199,16 +236,38 @@ public class MonthlyReportController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteReport(
-            @PathVariable Long id
+            @PathVariable Long id,
+            Authentication authentication
     ) {
-        if (monthlyReportService.getReportById(id).isEmpty()) {
+        MonthlyReport report = monthlyReportService
+                .getReportById(id)
+                .orElse(null);
+
+        if (report == null) {
             return ResponseEntity.notFound().build();
+        }
+
+        Long umkmId = report.getUmkm().getId();
+
+        if (!ownershipService.canManageUmkm(
+                authentication,
+                umkmId
+        )) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
+                    Map.of(
+                            "message",
+                            "Anda tidak boleh menghapus laporan ini."
+                    )
+            );
         }
 
         monthlyReportService.deleteReport(id);
 
         return ResponseEntity.ok(
-                Map.of("message", "Laporan bulanan berhasil dihapus.")
+                Map.of(
+                        "message",
+                        "Laporan bulanan berhasil dihapus."
+                )
         );
     }
 
@@ -240,15 +299,19 @@ public class MonthlyReportController {
             return "Omzet bersih tidak boleh negatif.";
         }
 
-        Integer jumlahTransaksi = report.getJumlahTransaksi();
+        Integer jumlahTransaksi =
+                report.getJumlahTransaksi();
 
-        if (jumlahTransaksi != null && jumlahTransaksi < 0) {
+        if (jumlahTransaksi != null
+                && jumlahTransaksi < 0) {
             return "Jumlah transaksi tidak boleh negatif.";
         }
 
-        Integer jumlahTenagaKerja = report.getJumlahTenagaKerja();
+        Integer jumlahTenagaKerja =
+                report.getJumlahTenagaKerja();
 
-        if (jumlahTenagaKerja != null && jumlahTenagaKerja < 0) {
+        if (jumlahTenagaKerja != null
+                && jumlahTenagaKerja < 0) {
             return "Jumlah tenaga kerja tidak boleh negatif.";
         }
 
@@ -270,15 +333,23 @@ public class MonthlyReportController {
         );
     }
 
-    private BigDecimal defaultBigDecimal(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value;
+    private BigDecimal defaultBigDecimal(
+            BigDecimal value
+    ) {
+        return value == null
+                ? BigDecimal.ZERO
+                : value;
     }
 
-    private Integer defaultInteger(Integer value) {
+    private Integer defaultInteger(
+            Integer value
+    ) {
         return value == null ? 0 : value;
     }
 
-    private boolean isNegative(BigDecimal value) {
+    private boolean isNegative(
+            BigDecimal value
+    ) {
         return value != null
                 && value.compareTo(BigDecimal.ZERO) < 0;
     }
