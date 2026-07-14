@@ -44,15 +44,7 @@ public class OwnershipService {
     ) {
         User user = getCurrentUser(authentication);
 
-        if (user == null) {
-            return false;
-        }
-
-        if (user.getRole() == Role.ADMIN) {
-            return true;
-        }
-
-        if (user.getRole() != Role.UMKM) {
+        if (user == null || user.getRole() != Role.UMKM) {
             return false;
         }
 

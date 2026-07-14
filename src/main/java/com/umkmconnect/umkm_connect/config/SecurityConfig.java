@@ -23,7 +23,7 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
-                // Halaman umum dan autentikasi
+                // Halaman dan endpoint publik
                 .requestMatchers(
                         "/",
                         "/css/**",
@@ -34,7 +34,7 @@ public class SecurityConfig {
                         "/api/users/register"
                 ).permitAll()
 
-                // Data publik yang dapat dilihat masyarakat
+                // Data publik yang boleh dilihat masyarakat
                 .requestMatchers(
                         HttpMethod.GET,
                         "/api/umkms/**",
@@ -42,34 +42,34 @@ public class SecurityConfig {
                         "/api/categories/**"
                 ).permitAll()
 
-                // Data akun hanya untuk Admin
+                // Daftar akun hanya boleh dilihat Admin
                 .requestMatchers("/api/users/**")
                 .hasRole("ADMIN")
 
-                // Verifikasi UMKM khusus Admin
+                // Verifikasi status UMKM hanya oleh Admin
                 .requestMatchers(
                         HttpMethod.PATCH,
                         "/api/umkms/*/status"
                 ).hasRole("ADMIN")
 
-                // Menghapus UMKM khusus Admin
+                // Penghapusan data UMKM hanya oleh Admin
                 .requestMatchers(
                         HttpMethod.DELETE,
                         "/api/umkms/**"
                 ).hasRole("ADMIN")
 
-                // Membuat dan mengubah profil UMKM
+                // Profil UMKM hanya dibuat dan diedit oleh pemilik UMKM
                 .requestMatchers(
                         HttpMethod.POST,
                         "/api/umkms/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
                 .requestMatchers(
                         HttpMethod.PUT,
                         "/api/umkms/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
-                // Pengelolaan kategori khusus Admin
+                // Kategori hanya dikelola Admin
                 .requestMatchers(
                         HttpMethod.POST,
                         "/api/categories/**"
@@ -85,45 +85,45 @@ public class SecurityConfig {
                         "/api/categories/**"
                 ).hasRole("ADMIN")
 
-                // Pengelolaan produk oleh UMKM dan Admin
+                // Produk hanya dikelola pemilik UMKM
                 .requestMatchers(
                         HttpMethod.POST,
                         "/api/products/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
                 .requestMatchers(
                         HttpMethod.PUT,
                         "/api/products/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
                 .requestMatchers(
                         HttpMethod.DELETE,
                         "/api/products/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
-                // Laporan dapat dilihat pihak internal
+                // Laporan boleh dilihat UMKM, Admin, dan DPRD
                 .requestMatchers(
                         HttpMethod.GET,
                         "/api/monthly-reports/**"
                 ).hasAnyRole("UMKM", "ADMIN", "DPRD")
 
-                // Laporan hanya dikelola UMKM dan Admin
+                // Laporan hanya boleh dikelola pemilik UMKM
                 .requestMatchers(
                         HttpMethod.POST,
                         "/api/monthly-reports/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
                 .requestMatchers(
                         HttpMethod.PUT,
                         "/api/monthly-reports/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
                 .requestMatchers(
                         HttpMethod.DELETE,
                         "/api/monthly-reports/**"
-                ).hasAnyRole("UMKM", "ADMIN")
+                ).hasRole("UMKM")
 
-                // Endpoint lain wajib login
+                // Endpoint lainnya wajib login
                 .anyRequest().authenticated()
             )
 
